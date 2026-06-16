@@ -55,8 +55,9 @@ function verifyToken(token: string): { url: string; format: string } | null {
 }
 
 const YTDLP_BASE_ARGS = [
-  "--extractor-args", "youtube:player_client=android,ios",
+  "--extractor-args", "youtube:player_client=tv_embedded,ios,android",
   "--no-check-certificates",
+  "--no-warnings",
 ];
 
 function runYtDlp(args: string[]): Promise<string> {
