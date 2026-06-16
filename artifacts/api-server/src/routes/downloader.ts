@@ -54,9 +54,15 @@ function verifyToken(token: string): { url: string; format: string } | null {
   }
 }
 
+const YTDLP_BASE_ARGS = [
+  "--extractor-args", "youtube:player_client=ios",
+  "--no-check-certificates",
+  "--user-agent", "Mozilla/5.0 (iPhone; CPU iPhone OS 16_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.0 Mobile/15E148 Safari/604.1",
+];
+
 function runYtDlp(args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
-    const proc = spawn("yt-dlp", args);
+    const proc = spawn("yt-dlp", [...YTDLP_BASE_ARGS, ...args]);
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
@@ -213,7 +219,7 @@ router.get("/download/stream", async (req, res) => {
 
   req.log.info({ url, format }, "Starting yt-dlp stream");
 
-  const proc = spawn("yt-dlp", args);
+  const proc = spawn("yt-dlp", [...YTDLP_BASE_ARGS, ...args]);
 
   proc.stdout.pipe(res);
 
