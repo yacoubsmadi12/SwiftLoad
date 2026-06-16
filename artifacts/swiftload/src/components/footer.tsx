@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Zap } from "lucide-react";
+import { Zap, Phone, Mail } from "lucide-react";
 import { useTranslation } from "@/hooks/use-language";
 import { AdSlot } from "./ad-slot";
 
@@ -8,6 +8,41 @@ export function Footer() {
 
   return (
     <footer className="border-t border-white/10 bg-card mt-auto">
+
+      {/* Developer profile section */}
+      <div className="w-full border-b border-white/5 py-10 px-4">
+        <div className="container mx-auto max-w-3xl flex flex-col sm:flex-row items-center sm:items-start gap-6 text-center sm:text-start">
+          <img
+            src="/developer.png"
+            alt="Eng. Yacoub Smadi"
+            className="w-24 h-24 rounded-full object-cover border-2 border-primary/40 shadow-lg shrink-0"
+          />
+          <div className="flex flex-col gap-2">
+            <h3 className="text-white font-bold text-lg">Eng. Yacoub Smadi</h3>
+            <p className="text-muted-foreground text-sm leading-relaxed max-w-xl">
+              A network engineer passionate about systems development with extensive experience in systems administration and AI.
+            </p>
+            <div className="flex flex-col sm:flex-row gap-3 mt-2 items-center sm:items-start">
+              <a
+                href="tel:+962796734144"
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-white transition-colors"
+                data-testid="link-developer-phone"
+              >
+                <Phone className="w-4 h-4 text-primary shrink-0" />
+                +962 796 734 144
+              </a>
+              <a
+                href="mailto:yakupsmadi@gmail.com"
+                className="flex items-center gap-2 text-sm text-muted-foreground hover:text-white transition-colors"
+                data-testid="link-developer-email"
+              >
+                <Mail className="w-4 h-4 text-primary shrink-0" />
+                yakupsmadi@gmail.com
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
 
       {/* Footer banner ad slot */}
       <div className="w-full border-b border-white/5 py-4 px-4 flex items-center justify-center">
