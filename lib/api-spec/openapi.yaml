@@ -10,6 +10,8 @@ servers:
 tags:
   - name: health
     description: Health operations
+  - name: downloader
+    description: Media download operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,52 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+  /info:
+    post:
+      operationId: getMediaInfo
+      tags: [downloader]
+      summary: Get media info
+      description: Fetch metadata and available formats for a URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaInfoInput"
+      responses:
+        "200":
+          description: Media info retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaInfo"
+        "400":
+          description: Invalid request
+        "500":
+          description: Could not retrieve media info
+  /download:
+    post:
+      operationId: startDownload
+      tags: [downloader]
+      summary: Start a download
+      description: Generate a signed download token for the given URL and format
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadInput"
+      responses:
+        "200":
+          description: Download token issued
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadToken"
+        "400":
+          description: Invalid request
+        "500":
+          description: Download failed
 components:
   schemas:
     HealthStatus:
@@ -33,4 +81,64 @@ components:
           type: string
       required:
         - status
-
+    MediaInfoInput:
+      type: object
+      required:
+        - url
+      properties:
+        url:
+          type: string
+    MediaFormat:
+      type: object
+      required:
+        - id
+        - label
+        - type
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+        quality:
+          type: ["string", "null"]
+    MediaInfo:
+      type: object
+      required:
+        - platform
+        - title
+        - formats
+      properties:
+        platform:
+          type: string
+        title:
+          type: string
+        thumbnail:
+          type: ["string", "null"]
+        duration:
+          type: ["integer", "null"]
+        formats:
+          type: array
+          items:
+            $ref: "#/components/schemas/MediaFormat"
+    DownloadInput:
+      type: object
+      required:
+        - url
+        - format
+      properties:
+        url:
+          type: string
+        format:
+          type: string
+    DownloadToken:
+      type: object
+      required:
+        - token
+        - filename
+      properties:
+        token:
+          type: string
+        filename:
+          type: string
