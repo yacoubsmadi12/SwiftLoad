@@ -3,13 +3,15 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: API specification
+  description: SwiftLoad API - Video and file downloader
 servers:
   - url: /api
     description: Base API path
 tags:
   - name: health
     description: Health operations
+  - name: downloader
+    description: Download operations
 paths:
   /healthz:
     get:
@@ -24,6 +26,65 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  /info:
+    post:
+      operationId: getMediaInfo
+      tags: [downloader]
+      summary: Get media info
+      description: Detect platform and get available formats for a URL
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/MediaInfoRequest"
+      responses:
+        "200":
+          description: Media info retrieved
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/MediaInfo"
+        "400":
+          description: Invalid URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: Failed to get info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
+  /download:
+    post:
+      operationId: startDownload
+      tags: [downloader]
+      summary: Start a download
+      description: Returns a signed download token to be used with the /download/stream endpoint
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/DownloadRequest"
+      responses:
+        "200":
+          description: Download token created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadToken"
+        "400":
+          description: Invalid request
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+
 components:
   schemas:
     HealthStatus:
@@ -34,3 +95,74 @@ components:
       required:
         - status
 
+    MediaInfoRequest:
+      type: object
+      required: [url]
+      properties:
+        url:
+          type: string
+          description: URL to fetch info for
+
+    MediaInfo:
+      type: object
+      required: [platform, title, thumbnail, formats]
+      properties:
+        platform:
+          type: string
+          description: Detected platform (youtube, instagram, tiktok, twitter, facebook, direct)
+        title:
+          type: string
+          description: Media title
+        thumbnail:
+          type: ["string", "null"]
+          description: Thumbnail URL
+        duration:
+          type: ["integer", "null"]
+          description: Duration in seconds
+        formats:
+          type: array
+          items:
+            $ref: "#/components/schemas/MediaFormat"
+
+    MediaFormat:
+      type: object
+      required: [id, label, type]
+      properties:
+        id:
+          type: string
+        label:
+          type: string
+        type:
+          type: string
+          description: "mp4, mp3, or file"
+        quality:
+          type: ["string", "null"]
+
+    DownloadRequest:
+      type: object
+      required: [url, format]
+      properties:
+        url:
+          type: string
+          description: URL to download
+        format:
+          type: string
+          description: "mp4, mp3, or best"
+
+    DownloadToken:
+      type: object
+      required: [token, filename]
+      properties:
+        token:
+          type: string
+          description: Signed token to use with /api/download/stream?token=...
+        filename:
+          type: string
+          description: Suggested filename for the download
+
+    ErrorResponse:
+      type: object
+      required: [error]
+      properties:
+        error:
+          type: string
