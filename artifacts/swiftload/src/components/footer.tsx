@@ -1,13 +1,20 @@
 import { Link } from "wouter";
 import { Zap } from "lucide-react";
 import { useTranslation } from "@/hooks/use-language";
+import { AdSlot } from "./ad-slot";
 
 export function Footer() {
   const { t } = useTranslation();
 
   return (
-    <footer className="border-t border-white/10 bg-card py-12 mt-auto">
-      <div className="container mx-auto px-4">
+    <footer className="border-t border-white/10 bg-card mt-auto">
+
+      {/* Footer banner ad slot */}
+      <div className="w-full border-b border-white/5 py-4 px-4 flex items-center justify-center">
+        <AdSlot type="footer-banner" />
+      </div>
+
+      <div className="container mx-auto px-4 py-12">
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="col-span-1 md:col-span-2">
             <Link href="/" className="flex items-center gap-2 mb-4">
