@@ -47,3 +47,5 @@ Thumbs.db
 # Replit
 .cache/
 .local/
+bin/yt-dlp
+bin/yt-dlp_*
