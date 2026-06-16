@@ -54,15 +54,25 @@ function verifyToken(token: string): { url: string; format: string } | null {
   }
 }
 
-const YTDLP_BASE_ARGS = [
-  "--extractor-args", "youtube:player_client=tv_embedded,ios,android",
+const YTDLP_COMMON_ARGS = [
   "--no-check-certificates",
   "--no-warnings",
+  "--user-agent", "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.91 Mobile Safari/537.36",
 ];
 
-function runYtDlp(args: string[]): Promise<string> {
+const YOUTUBE_CLIENT_SEQUENCES = [
+  "mweb,tv_embedded,ios,android",
+  "ios,mweb,android",
+  "tv_embedded,mweb",
+];
+
+function runYtDlp(args: string[], youtubeClientOverride?: string): Promise<string> {
+  const extraArgs = youtubeClientOverride
+    ? ["--extractor-args", `youtube:player_client=${youtubeClientOverride}`]
+    : ["--extractor-args", `youtube:player_client=${YOUTUBE_CLIENT_SEQUENCES[0]}`];
+
   return new Promise((resolve, reject) => {
-    const proc = spawn("yt-dlp", [...YTDLP_BASE_ARGS, ...args]);
+    const proc = spawn("yt-dlp", [...YTDLP_COMMON_ARGS, ...extraArgs, ...args]);
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
@@ -74,7 +84,35 @@ function runYtDlp(args: string[]): Promise<string> {
   });
 }
 
+async function runYtDlpWithRetry(args: string[]): Promise<string> {
+  let lastError: Error = new Error("unknown error");
+  for (const clientSeq of YOUTUBE_CLIENT_SEQUENCES) {
+    try {
+      return await runYtDlp(args, clientSeq);
+    } catch (err) {
+      lastError = err as Error;
+      const msg = lastError.message ?? "";
+      if (!msg.includes("Sign in") && !msg.includes("bot") && !msg.includes("confirm")) {
+        throw lastError;
+      }
+    }
+  }
+  throw lastError;
+}
+
 // ── POST /api/info ────────────────────────────────────────────────────────────
+
+async function getYouTubeInfoViaOEmbed(url: string): Promise<{ title: string; thumbnail: string | null; duration: number | null }> {
+  const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+  const resp = await fetch(oembedUrl);
+  if (!resp.ok) throw new Error(`oEmbed failed: ${resp.status}`);
+  const data = await resp.json() as { title?: string; thumbnail_url?: string };
+  return {
+    title: data.title ?? "Unknown",
+    thumbnail: data.thumbnail_url ?? null,
+    duration: null,
+  };
+}
 
 router.post("/info", async (req, res) => {
   const parsed = GetMediaInfoBody.safeParse(req.body);
@@ -86,8 +124,23 @@ router.post("/info", async (req, res) => {
   const { url } = parsed.data;
   const platform = detectPlatform(url);
 
+  const formats = [
+    { id: "mp4", label: "Video (MP4)", type: "mp4", quality: "best" },
+    { id: "mp3", label: "Audio (MP3)", type: "mp3", quality: "best" },
+  ];
+
+  if (platform === "youtube") {
+    try {
+      const info = await getYouTubeInfoViaOEmbed(url);
+      res.json({ platform, ...info, formats });
+      return;
+    } catch {
+      // fall through to yt-dlp
+    }
+  }
+
   try {
-    const jsonStr = await runYtDlp([
+    const jsonStr = await runYtDlpWithRetry([
       "--dump-json",
       "--no-playlist",
       "--no-warnings",
@@ -97,11 +150,6 @@ router.post("/info", async (req, res) => {
 
     const info = JSON.parse(jsonStr);
 
-    const formats: { id: string; label: string; type: string; quality: string | null }[] = [
-      { id: "mp4", label: "Video (MP4)", type: "mp4", quality: "best" },
-      { id: "mp3", label: "Audio (MP3)", type: "mp3", quality: "best" },
-    ];
-
     res.json({
       platform,
       title: info.title ?? "Unknown",
@@ -110,16 +158,13 @@ router.post("/info", async (req, res) => {
       formats,
     });
   } catch (err) {
-    // Fallback for direct file URLs or unsupported sites
     if (platform === "direct") {
       res.json({
         platform,
         title: url.split("/").pop() ?? "File",
         thumbnail: null,
         duration: null,
-        formats: [
-          { id: "file", label: "Original File", type: "file", quality: null },
-        ],
+        formats: [{ id: "file", label: "Original File", type: "file", quality: null }],
       });
       return;
     }
@@ -141,7 +186,7 @@ router.post("/download", async (req, res) => {
 
   let filename = "download";
   try {
-    const title = await runYtDlp([
+    const title = await runYtDlpWithRetry([
       "--get-title",
       "--no-playlist",
       "--no-warnings",
