@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { Zap, Phone, Mail } from "lucide-react";
+import { Phone, Mail } from "lucide-react";
 import { useTranslation } from "@/hooks/use-language";
 import { AdSlot } from "./ad-slot";
 
@@ -53,9 +53,7 @@ export function Footer() {
         <div className="grid grid-cols-1 md:grid-cols-4 gap-8 mb-8">
           <div className="col-span-1 md:col-span-2">
             <Link href="/" className="flex items-center gap-2 mb-4">
-              <div className="w-6 h-6 rounded bg-primary-gradient flex items-center justify-center text-white">
-                <Zap className="w-3 h-3 fill-current" />
-              </div>
+              <img src="/favicon.png" alt="SwiftLoad" className="w-6 h-6 object-contain" />
               <span className="font-bold text-white">{t("app.name")}</span>
             </Link>
             <p className="text-sm text-muted-foreground max-w-sm">
