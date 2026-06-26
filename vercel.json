@@ -1,6 +1,6 @@
 {
   "buildCommand": "pnpm --filter @workspace/swiftload run build",
-  "outputDirectory": "artifacts/swiftload/dist/public",
+  "outputDirectory": "dist",
   "installCommand": "pnpm install",
   "framework": null,
   "rewrites": [
