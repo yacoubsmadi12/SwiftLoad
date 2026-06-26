@@ -272,60 +272,83 @@ router.get("/download/stream", async (req, res) => {
 
   req.log.info({ url, format }, "Starting yt-dlp download to temp file");
 
-  const proc = spawn("yt-dlp", [...YTDLP_COMMON_ARGS, ...args]);
+  const isYouTube = url.includes("youtube.com") || url.includes("youtu.be");
 
-  let stderr = "";
-  proc.stderr.on("data", (data: Buffer) => {
-    stderr += data.toString();
-    req.log.debug({ stderr: data.toString() }, "yt-dlp stderr");
-  });
+  function tryDownload(clientIndex: number): void {
+    fs.unlink(tmpOut, () => {}); // clean up any partial file from previous attempt
 
-  proc.on("error", (err) => {
-    req.log.error({ err }, "yt-dlp process error");
-    fs.unlink(tmpOut, () => {});
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Download process failed" });
-    }
-  });
+    const ytArgs = isYouTube
+      ? ["--extractor-args", `youtube:player_client=${YOUTUBE_CLIENT_SEQUENCES[clientIndex]}`]
+      : [];
 
-  proc.on("close", (code) => {
-    req.log.info({ code }, "yt-dlp finished");
-    if (code !== 0) {
-      req.log.error({ stderr }, "yt-dlp failed");
+    const proc = spawn("yt-dlp", [...YTDLP_COMMON_ARGS, ...ytArgs, ...args]);
+
+    let stderr = "";
+    proc.stderr.on("data", (data: Buffer) => {
+      stderr += data.toString();
+      req.log.debug({ stderr: data.toString() }, "yt-dlp stderr");
+    });
+
+    proc.on("error", (err) => {
+      req.log.error({ err }, "yt-dlp process error");
       fs.unlink(tmpOut, () => {});
       if (!res.headersSent) {
-        res.status(500).json({ error: "Download failed. The URL may be unsupported or unavailable." });
+        res.status(500).json({ error: "Download process failed" });
       }
-      return;
-    }
+    });
 
-    const stat = fs.statSync(tmpOut, { throwIfNoEntry: false });
-    if (!stat) {
-      if (!res.headersSent) {
-        res.status(500).json({ error: "Downloaded file not found" });
+    proc.on("close", (code) => {
+      req.log.info({ code, clientIndex }, "yt-dlp attempt finished");
+
+      if (code !== 0) {
+        const isClientError = stderr.includes("not available on this app") ||
+          stderr.includes("Sign in") ||
+          stderr.includes("bot") ||
+          stderr.includes("confirm");
+
+        // Retry with next client if it's a YouTube bot/availability issue
+        if (isYouTube && isClientError && clientIndex + 1 < YOUTUBE_CLIENT_SEQUENCES.length) {
+          req.log.warn({ clientIndex, stderr }, "Retrying with next YouTube client");
+          tryDownload(clientIndex + 1);
+          return;
+        }
+
+        req.log.error({ stderr }, "yt-dlp failed all attempts");
+        fs.unlink(tmpOut, () => {});
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Download failed. The URL may be unsupported or unavailable." });
+        }
+        return;
       }
-      return;
-    }
 
-    res.setHeader("Content-Type", isAudio ? "audio/mpeg" : "video/mp4");
-    res.setHeader("Content-Disposition", `attachment; filename="download.${ext}"`);
-    res.setHeader("Content-Length", stat.size);
+      const stat = fs.statSync(tmpOut, { throwIfNoEntry: false });
+      if (!stat) {
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Downloaded file not found" });
+        }
+        return;
+      }
 
-    const readStream = fs.createReadStream(tmpOut);
-    readStream.pipe(res);
-    readStream.on("close", () => {
+      res.setHeader("Content-Type", isAudio ? "audio/mpeg" : "video/mp4");
+      res.setHeader("Content-Disposition", `attachment; filename="download.${ext}"`);
+      res.setHeader("Content-Length", stat.size);
+
+      const readStream = fs.createReadStream(tmpOut);
+      readStream.pipe(res);
+      readStream.on("close", () => fs.unlink(tmpOut, () => {}));
+      readStream.on("error", (err) => {
+        req.log.error({ err }, "Stream error");
+        fs.unlink(tmpOut, () => {});
+      });
+    });
+
+    req.on("close", () => {
+      proc.kill();
       fs.unlink(tmpOut, () => {});
     });
-    readStream.on("error", (err) => {
-      req.log.error({ err }, "Stream error");
-      fs.unlink(tmpOut, () => {});
-    });
-  });
+  }
 
-  req.on("close", () => {
-    proc.kill();
-    fs.unlink(tmpOut, () => {});
-  });
+  tryDownload(0);
 });
 
 export default router;
