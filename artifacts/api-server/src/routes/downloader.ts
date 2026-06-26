@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { spawn } from "child_process";
 import crypto from "crypto";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { GetMediaInfoBody, StartDownloadBody } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 
@@ -246,34 +249,40 @@ router.get("/download/stream", async (req, res) => {
     return;
   }
 
-  // Build yt-dlp args for audio or video
-  const args: string[] = ["--no-playlist", "--no-warnings", "-o", "-"];
+  const isAudio = format === "mp3";
+  const ext = isAudio ? "mp3" : "mp4";
+  const tmpDir = os.tmpdir();
+  const tmpBase = path.join(tmpDir, `swiftload-${crypto.randomUUID()}`);
+  const tmpOut = `${tmpBase}.${ext}`;
 
-  if (format === "mp3") {
-    args.push("-f", "bestaudio", "--extract-audio", "--audio-format", "mp3");
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.setHeader("Content-Disposition", `attachment; filename="audio.mp3"`);
+  const args: string[] = [
+    "--no-playlist",
+    "--no-warnings",
+    "--no-progress",
+    "-o", tmpOut,
+  ];
+
+  if (isAudio) {
+    args.push("-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "0");
   } else {
-    // mp4
-    args.push("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best");
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader("Content-Disposition", `attachment; filename="video.mp4"`);
+    args.push("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--merge-output-format", "mp4");
   }
 
   args.push(url);
 
-  req.log.info({ url, format }, "Starting yt-dlp stream");
+  req.log.info({ url, format }, "Starting yt-dlp download to temp file");
 
   const proc = spawn("yt-dlp", [...YTDLP_COMMON_ARGS, ...args]);
 
-  proc.stdout.pipe(res);
-
+  let stderr = "";
   proc.stderr.on("data", (data: Buffer) => {
+    stderr += data.toString();
     req.log.debug({ stderr: data.toString() }, "yt-dlp stderr");
   });
 
   proc.on("error", (err) => {
     req.log.error({ err }, "yt-dlp process error");
+    fs.unlink(tmpOut, () => {});
     if (!res.headersSent) {
       res.status(500).json({ error: "Download process failed" });
     }
@@ -281,13 +290,41 @@ router.get("/download/stream", async (req, res) => {
 
   proc.on("close", (code) => {
     req.log.info({ code }, "yt-dlp finished");
-    if (code !== 0 && !res.headersSent) {
-      res.status(500).json({ error: "Download failed" });
+    if (code !== 0) {
+      req.log.error({ stderr }, "yt-dlp failed");
+      fs.unlink(tmpOut, () => {});
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Download failed. The URL may be unsupported or unavailable." });
+      }
+      return;
     }
+
+    const stat = fs.statSync(tmpOut, { throwIfNoEntry: false });
+    if (!stat) {
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Downloaded file not found" });
+      }
+      return;
+    }
+
+    res.setHeader("Content-Type", isAudio ? "audio/mpeg" : "video/mp4");
+    res.setHeader("Content-Disposition", `attachment; filename="download.${ext}"`);
+    res.setHeader("Content-Length", stat.size);
+
+    const readStream = fs.createReadStream(tmpOut);
+    readStream.pipe(res);
+    readStream.on("close", () => {
+      fs.unlink(tmpOut, () => {});
+    });
+    readStream.on("error", (err) => {
+      req.log.error({ err }, "Stream error");
+      fs.unlink(tmpOut, () => {});
+    });
   });
 
   req.on("close", () => {
     proc.kill();
+    fs.unlink(tmpOut, () => {});
   });
 });
 
