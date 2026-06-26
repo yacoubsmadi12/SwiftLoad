@@ -1,5 +1,5 @@
 'use strict';
-const { runYtDlp, verifyToken, setCors } = require('../_utils');
+const { runYtDlpWithRetry, verifyToken, setCors } = require('../_utils');
 
 module.exports = async function handler(req, res) {
   setCors(res);
@@ -28,7 +28,7 @@ module.exports = async function handler(req, res) {
         ? 'bestaudio[ext=m4a]/bestaudio[ext=webm]/bestaudio'
         : 'best[ext=mp4]/bestvideo[ext=mp4][height<=1080]+bestaudio[ext=m4a]/best';
 
-    const output = await runYtDlp([
+    const output = await runYtDlpWithRetry([
       '--get-url',
       '--no-playlist',
       '--no-warnings',

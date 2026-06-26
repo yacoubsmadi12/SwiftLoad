@@ -22,9 +22,16 @@ function getYtDlpBin() {
 
 const YTDLP_BIN = getYtDlpBin();
 
-const YTDLP_BASE_ARGS = [
-  '--extractor-args', 'youtube:player_client=android,ios',
+const YTDLP_COMMON_ARGS = [
   '--no-check-certificates',
+  '--no-warnings',
+  '--user-agent', 'Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.91 Mobile Safari/537.36',
+];
+
+const YOUTUBE_CLIENT_SEQUENCES = [
+  'mweb,tv_embedded,ios,android',
+  'ios,mweb,android',
+  'tv_embedded,mweb',
 ];
 
 function detectPlatform(url) {
@@ -39,9 +46,11 @@ function detectPlatform(url) {
   return 'direct';
 }
 
-function runYtDlp(args) {
+function runYtDlp(args, youtubeClientOverride) {
+  const clientSeq = youtubeClientOverride || YOUTUBE_CLIENT_SEQUENCES[0];
+  const extraArgs = ['--extractor-args', `youtube:player_client=${clientSeq}`];
   return new Promise((resolve, reject) => {
-    const proc = spawn(YTDLP_BIN, [...YTDLP_BASE_ARGS, ...args]);
+    const proc = spawn(YTDLP_BIN, [...YTDLP_COMMON_ARGS, ...extraArgs, ...args]);
     let stdout = '';
     let stderr = '';
     proc.stdout.on('data', d => (stdout += d.toString()));
@@ -52,6 +61,34 @@ function runYtDlp(args) {
     });
     proc.on('error', reject);
   });
+}
+
+async function runYtDlpWithRetry(args) {
+  let lastError = new Error('unknown error');
+  for (const clientSeq of YOUTUBE_CLIENT_SEQUENCES) {
+    try {
+      return await runYtDlp(args, clientSeq);
+    } catch (err) {
+      lastError = err;
+      const msg = err.message || '';
+      if (!msg.includes('Sign in') && !msg.includes('bot') && !msg.includes('confirm')) {
+        throw lastError;
+      }
+    }
+  }
+  throw lastError;
+}
+
+async function getYouTubeInfoViaOEmbed(url) {
+  const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+  const resp = await fetch(oembedUrl);
+  if (!resp.ok) throw new Error(`oEmbed failed: ${resp.status}`);
+  const data = await resp.json();
+  return {
+    title: data.title || 'Unknown',
+    thumbnail: data.thumbnail_url || null,
+    duration: null,
+  };
 }
 
 function signToken(payload) {
@@ -78,4 +115,9 @@ function setCors(res) {
   res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
 }
 
-module.exports = { YTDLP_BASE_ARGS, YTDLP_BIN, detectPlatform, runYtDlp, signToken, verifyToken, setCors };
+module.exports = {
+  YTDLP_BIN, YTDLP_COMMON_ARGS,
+  detectPlatform, runYtDlp, runYtDlpWithRetry,
+  getYouTubeInfoViaOEmbed,
+  signToken, verifyToken, setCors,
+};

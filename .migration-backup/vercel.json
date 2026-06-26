@@ -1,21 +1,9 @@
 {
-  "version": 2,
-  "buildCommand": "mkdir -p bin && curl -fsSL https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp -o bin/yt-dlp && chmod +x bin/yt-dlp && BASE_PATH=/ PORT=3000 pnpm --filter @workspace/swiftload run build",
-  "outputDirectory": "artifacts/swiftload/dist/public",
-  "functions": {
-    "api/**/*.js": {
-      "includeFiles": "bin/**",
-      "maxDuration": 60
-    }
-  },
+  "buildCommand": "pnpm --filter @workspace/swiftload run build",
+  "outputDirectory": "artifacts/swiftload/dist",
+  "installCommand": "pnpm install",
+  "framework": null,
   "rewrites": [
-    {
-      "source": "/api/:path*",
-      "destination": "/api/:path*"
-    },
-    {
-      "source": "/((?!api/).*)",
-      "destination": "/index.html"
-    }
+    { "source": "/(.*)", "destination": "/index.html" }
   ]
 }

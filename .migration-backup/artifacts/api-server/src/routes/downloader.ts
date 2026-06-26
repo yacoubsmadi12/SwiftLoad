@@ -1,6 +1,9 @@
 import { Router } from "express";
 import { spawn } from "child_process";
 import crypto from "crypto";
+import fs from "fs";
+import os from "os";
+import path from "path";
 import { GetMediaInfoBody, StartDownloadBody } from "@workspace/api-zod";
 import { logger } from "../lib/logger";
 
@@ -54,14 +57,25 @@ function verifyToken(token: string): { url: string; format: string } | null {
   }
 }
 
-const YTDLP_BASE_ARGS = [
-  "--extractor-args", "youtube:player_client=android,ios",
+const YTDLP_COMMON_ARGS = [
   "--no-check-certificates",
+  "--no-warnings",
+  "--user-agent", "Mozilla/5.0 (Linux; Android 11; Pixel 5) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.91 Mobile Safari/537.36",
 ];
 
-function runYtDlp(args: string[]): Promise<string> {
+const YOUTUBE_CLIENT_SEQUENCES = [
+  "mweb,tv_embedded,ios,android",
+  "ios,mweb,android",
+  "tv_embedded,mweb",
+];
+
+function runYtDlp(args: string[], youtubeClientOverride?: string): Promise<string> {
+  const extraArgs = youtubeClientOverride
+    ? ["--extractor-args", `youtube:player_client=${youtubeClientOverride}`]
+    : ["--extractor-args", `youtube:player_client=${YOUTUBE_CLIENT_SEQUENCES[0]}`];
+
   return new Promise((resolve, reject) => {
-    const proc = spawn("yt-dlp", [...YTDLP_BASE_ARGS, ...args]);
+    const proc = spawn("yt-dlp", [...YTDLP_COMMON_ARGS, ...extraArgs, ...args]);
     let stdout = "";
     let stderr = "";
     proc.stdout.on("data", (d: Buffer) => (stdout += d.toString()));
@@ -73,7 +87,35 @@ function runYtDlp(args: string[]): Promise<string> {
   });
 }
 
+async function runYtDlpWithRetry(args: string[]): Promise<string> {
+  let lastError: Error = new Error("unknown error");
+  for (const clientSeq of YOUTUBE_CLIENT_SEQUENCES) {
+    try {
+      return await runYtDlp(args, clientSeq);
+    } catch (err) {
+      lastError = err as Error;
+      const msg = lastError.message ?? "";
+      if (!msg.includes("Sign in") && !msg.includes("bot") && !msg.includes("confirm")) {
+        throw lastError;
+      }
+    }
+  }
+  throw lastError;
+}
+
 // ── POST /api/info ────────────────────────────────────────────────────────────
+
+async function getYouTubeInfoViaOEmbed(url: string): Promise<{ title: string; thumbnail: string | null; duration: number | null }> {
+  const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+  const resp = await fetch(oembedUrl);
+  if (!resp.ok) throw new Error(`oEmbed failed: ${resp.status}`);
+  const data = await resp.json() as { title?: string; thumbnail_url?: string };
+  return {
+    title: data.title ?? "Unknown",
+    thumbnail: data.thumbnail_url ?? null,
+    duration: null,
+  };
+}
 
 router.post("/info", async (req, res) => {
   const parsed = GetMediaInfoBody.safeParse(req.body);
@@ -85,8 +127,23 @@ router.post("/info", async (req, res) => {
   const { url } = parsed.data;
   const platform = detectPlatform(url);
 
+  const formats = [
+    { id: "mp4", label: "Video (MP4)", type: "mp4", quality: "best" },
+    { id: "mp3", label: "Audio (MP3)", type: "mp3", quality: "best" },
+  ];
+
+  if (platform === "youtube") {
+    try {
+      const info = await getYouTubeInfoViaOEmbed(url);
+      res.json({ platform, ...info, formats });
+      return;
+    } catch {
+      // fall through to yt-dlp
+    }
+  }
+
   try {
-    const jsonStr = await runYtDlp([
+    const jsonStr = await runYtDlpWithRetry([
       "--dump-json",
       "--no-playlist",
       "--no-warnings",
@@ -96,11 +153,6 @@ router.post("/info", async (req, res) => {
 
     const info = JSON.parse(jsonStr);
 
-    const formats: { id: string; label: string; type: string; quality: string | null }[] = [
-      { id: "mp4", label: "Video (MP4)", type: "mp4", quality: "best" },
-      { id: "mp3", label: "Audio (MP3)", type: "mp3", quality: "best" },
-    ];
-
     res.json({
       platform,
       title: info.title ?? "Unknown",
@@ -109,16 +161,13 @@ router.post("/info", async (req, res) => {
       formats,
     });
   } catch (err) {
-    // Fallback for direct file URLs or unsupported sites
     if (platform === "direct") {
       res.json({
         platform,
         title: url.split("/").pop() ?? "File",
         thumbnail: null,
         duration: null,
-        formats: [
-          { id: "file", label: "Original File", type: "file", quality: null },
-        ],
+        formats: [{ id: "file", label: "Original File", type: "file", quality: null }],
       });
       return;
     }
@@ -140,7 +189,7 @@ router.post("/download", async (req, res) => {
 
   let filename = "download";
   try {
-    const title = await runYtDlp([
+    const title = await runYtDlpWithRetry([
       "--get-title",
       "--no-playlist",
       "--no-warnings",
@@ -200,49 +249,106 @@ router.get("/download/stream", async (req, res) => {
     return;
   }
 
-  // Build yt-dlp args for audio or video
-  const args: string[] = ["--no-playlist", "--no-warnings", "-o", "-"];
+  const isAudio = format === "mp3";
+  const ext = isAudio ? "mp3" : "mp4";
+  const tmpDir = os.tmpdir();
+  const tmpBase = path.join(tmpDir, `swiftload-${crypto.randomUUID()}`);
+  const tmpOut = `${tmpBase}.${ext}`;
 
-  if (format === "mp3") {
-    args.push("-f", "bestaudio", "--extract-audio", "--audio-format", "mp3");
-    res.setHeader("Content-Type", "audio/mpeg");
-    res.setHeader("Content-Disposition", `attachment; filename="audio.mp3"`);
+  const args: string[] = [
+    "--no-playlist",
+    "--no-warnings",
+    "--no-progress",
+    "-o", tmpOut,
+  ];
+
+  if (isAudio) {
+    args.push("-f", "bestaudio/best", "-x", "--audio-format", "mp3", "--audio-quality", "0");
   } else {
-    // mp4
-    args.push("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best");
-    res.setHeader("Content-Type", "video/mp4");
-    res.setHeader("Content-Disposition", `attachment; filename="video.mp4"`);
+    args.push("-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best", "--merge-output-format", "mp4");
   }
 
   args.push(url);
 
-  req.log.info({ url, format }, "Starting yt-dlp stream");
+  req.log.info({ url, format }, "Starting yt-dlp download to temp file");
 
-  const proc = spawn("yt-dlp", [...YTDLP_BASE_ARGS, ...args]);
+  const isYouTube = url.includes("youtube.com") || url.includes("youtu.be");
 
-  proc.stdout.pipe(res);
+  function tryDownload(clientIndex: number): void {
+    fs.unlink(tmpOut, () => {}); // clean up any partial file from previous attempt
 
-  proc.stderr.on("data", (data: Buffer) => {
-    req.log.debug({ stderr: data.toString() }, "yt-dlp stderr");
-  });
+    const ytArgs = isYouTube
+      ? ["--extractor-args", `youtube:player_client=${YOUTUBE_CLIENT_SEQUENCES[clientIndex]}`]
+      : [];
 
-  proc.on("error", (err) => {
-    req.log.error({ err }, "yt-dlp process error");
-    if (!res.headersSent) {
-      res.status(500).json({ error: "Download process failed" });
-    }
-  });
+    const proc = spawn("yt-dlp", [...YTDLP_COMMON_ARGS, ...ytArgs, ...args]);
 
-  proc.on("close", (code) => {
-    req.log.info({ code }, "yt-dlp finished");
-    if (code !== 0 && !res.headersSent) {
-      res.status(500).json({ error: "Download failed" });
-    }
-  });
+    let stderr = "";
+    proc.stderr.on("data", (data: Buffer) => {
+      stderr += data.toString();
+      req.log.debug({ stderr: data.toString() }, "yt-dlp stderr");
+    });
 
-  req.on("close", () => {
-    proc.kill();
-  });
+    proc.on("error", (err) => {
+      req.log.error({ err }, "yt-dlp process error");
+      fs.unlink(tmpOut, () => {});
+      if (!res.headersSent) {
+        res.status(500).json({ error: "Download process failed" });
+      }
+    });
+
+    proc.on("close", (code) => {
+      req.log.info({ code, clientIndex }, "yt-dlp attempt finished");
+
+      if (code !== 0) {
+        const isClientError = stderr.includes("not available on this app") ||
+          stderr.includes("Sign in") ||
+          stderr.includes("bot") ||
+          stderr.includes("confirm");
+
+        // Retry with next client if it's a YouTube bot/availability issue
+        if (isYouTube && isClientError && clientIndex + 1 < YOUTUBE_CLIENT_SEQUENCES.length) {
+          req.log.warn({ clientIndex, stderr }, "Retrying with next YouTube client");
+          tryDownload(clientIndex + 1);
+          return;
+        }
+
+        req.log.error({ stderr }, "yt-dlp failed all attempts");
+        fs.unlink(tmpOut, () => {});
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Download failed. The URL may be unsupported or unavailable." });
+        }
+        return;
+      }
+
+      const stat = fs.statSync(tmpOut, { throwIfNoEntry: false });
+      if (!stat) {
+        if (!res.headersSent) {
+          res.status(500).json({ error: "Downloaded file not found" });
+        }
+        return;
+      }
+
+      res.setHeader("Content-Type", isAudio ? "audio/mpeg" : "video/mp4");
+      res.setHeader("Content-Disposition", `attachment; filename="download.${ext}"`);
+      res.setHeader("Content-Length", stat.size);
+
+      const readStream = fs.createReadStream(tmpOut);
+      readStream.pipe(res);
+      readStream.on("close", () => fs.unlink(tmpOut, () => {}));
+      readStream.on("error", (err) => {
+        req.log.error({ err }, "Stream error");
+        fs.unlink(tmpOut, () => {});
+      });
+    });
+
+    req.on("close", () => {
+      proc.kill();
+      fs.unlink(tmpOut, () => {});
+    });
+  }
+
+  tryDownload(0);
 });
 
 export default router;

@@ -1,6 +1,6 @@
 {pkgs}: {
   deps = [
-    pkgs.ffmpeg
+    pkgs.nix
     pkgs.yt-dlp
   ];
 }

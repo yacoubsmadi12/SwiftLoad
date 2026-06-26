@@ -1,5 +1,5 @@
 'use strict';
-const { runYtDlp, signToken, setCors } = require('./_utils');
+const { runYtDlpWithRetry, signToken, setCors } = require('./_utils');
 
 module.exports = async function handler(req, res) {
   setCors(res);
@@ -13,7 +13,7 @@ module.exports = async function handler(req, res) {
 
   let filename = 'download';
   try {
-    const title = await runYtDlp([
+    const title = await runYtDlpWithRetry([
       '--get-title',
       '--no-playlist',
       '--no-warnings',

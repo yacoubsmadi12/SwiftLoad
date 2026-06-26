@@ -1,5 +1,5 @@
 'use strict';
-const { detectPlatform, runYtDlp, setCors } = require('./_utils');
+const { detectPlatform, runYtDlpWithRetry, getYouTubeInfoViaOEmbed, setCors } = require('./_utils');
 
 module.exports = async function handler(req, res) {
   setCors(res);
@@ -12,9 +12,22 @@ module.exports = async function handler(req, res) {
   }
 
   const platform = detectPlatform(url);
+  const formats = [
+    { id: 'mp4', label: 'Video (MP4)', type: 'mp4', quality: 'best' },
+    { id: 'mp3', label: 'Audio (MP3)', type: 'mp3', quality: 'best' },
+  ];
+
+  if (platform === 'youtube') {
+    try {
+      const info = await getYouTubeInfoViaOEmbed(url);
+      return res.json({ platform, ...info, formats });
+    } catch {
+      // fall through to yt-dlp
+    }
+  }
 
   try {
-    const jsonStr = await runYtDlp([
+    const jsonStr = await runYtDlpWithRetry([
       '--dump-json',
       '--no-playlist',
       '--no-warnings',
@@ -23,16 +36,12 @@ module.exports = async function handler(req, res) {
     ]);
 
     const info = JSON.parse(jsonStr);
-
     return res.json({
       platform,
       title: info.title || 'Unknown',
       thumbnail: info.thumbnail || null,
       duration: typeof info.duration === 'number' ? info.duration : null,
-      formats: [
-        { id: 'mp4', label: 'Video (MP4)', type: 'mp4', quality: 'best' },
-        { id: 'mp3', label: 'Audio (M4A)', type: 'mp3', quality: 'best' },
-      ],
+      formats,
     });
   } catch (err) {
     if (platform === 'direct') {
@@ -45,8 +54,6 @@ module.exports = async function handler(req, res) {
       });
     }
     console.error('yt-dlp info failed:', err.message);
-    return res.status(500).json({
-      error: 'Could not retrieve media info. Please check the URL and try again.',
-    });
+    return res.status(500).json({ error: 'Could not retrieve media info. Please check the URL and try again.' });
   }
 };

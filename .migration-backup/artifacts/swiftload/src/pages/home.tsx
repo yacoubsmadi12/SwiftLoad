@@ -49,7 +49,8 @@ export default function Home() {
           title: t("success.download_started"),
           description: data.filename,
         });
-        window.location.href = `/api/download/stream?token=${data.token}`;
+        const apiBase = import.meta.env.VITE_API_BASE_URL ?? "";
+        window.location.href = `${apiBase}/api/download/stream?token=${data.token}`;
       },
       onError: () => {
         toast({

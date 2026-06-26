@@ -3,7 +3,7 @@ info:
   # Do not change the title, if the title changes, the import paths will be broken
   title: Api
   version: 0.1.0
-  description: SwiftLoad API - Video and file downloader
+  description: API specification
 servers:
   - url: /api
     description: Base API path
@@ -11,7 +11,7 @@ tags:
   - name: health
     description: Health operations
   - name: downloader
-    description: Download operations
+    description: Media download operations
 paths:
   /healthz:
     get:
@@ -26,19 +26,18 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
-
   /info:
     post:
       operationId: getMediaInfo
       tags: [downloader]
       summary: Get media info
-      description: Detect platform and get available formats for a URL
+      description: Fetch metadata and available formats for a URL
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/MediaInfoRequest"
+              $ref: "#/components/schemas/MediaInfoInput"
       responses:
         "200":
           description: Media info retrieved
@@ -47,44 +46,32 @@ paths:
               schema:
                 $ref: "#/components/schemas/MediaInfo"
         "400":
-          description: Invalid URL
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          description: Invalid request
         "500":
-          description: Failed to get info
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
+          description: Could not retrieve media info
   /download:
     post:
       operationId: startDownload
       tags: [downloader]
       summary: Start a download
-      description: Returns a signed download token to be used with the /download/stream endpoint
+      description: Generate a signed download token for the given URL and format
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: "#/components/schemas/DownloadRequest"
+              $ref: "#/components/schemas/DownloadInput"
       responses:
         "200":
-          description: Download token created
+          description: Download token issued
           content:
             application/json:
               schema:
                 $ref: "#/components/schemas/DownloadToken"
         "400":
           description: Invalid request
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-
+        "500":
+          description: Download failed
 components:
   schemas:
     HealthStatus:
@@ -94,39 +81,19 @@ components:
           type: string
       required:
         - status
-
-    MediaInfoRequest:
+    MediaInfoInput:
       type: object
-      required: [url]
+      required:
+        - url
       properties:
         url:
           type: string
-          description: URL to fetch info for
-
-    MediaInfo:
-      type: object
-      required: [platform, title, thumbnail, formats]
-      properties:
-        platform:
-          type: string
-          description: Detected platform (youtube, instagram, tiktok, twitter, facebook, direct)
-        title:
-          type: string
-          description: Media title
-        thumbnail:
-          type: ["string", "null"]
-          description: Thumbnail URL
-        duration:
-          type: ["integer", "null"]
-          description: Duration in seconds
-        formats:
-          type: array
-          items:
-            $ref: "#/components/schemas/MediaFormat"
-
     MediaFormat:
       type: object
-      required: [id, label, type]
+      required:
+        - id
+        - label
+        - type
       properties:
         id:
           type: string
@@ -134,35 +101,44 @@ components:
           type: string
         type:
           type: string
-          description: "mp4, mp3, or file"
         quality:
           type: ["string", "null"]
-
-    DownloadRequest:
+    MediaInfo:
       type: object
-      required: [url, format]
+      required:
+        - platform
+        - title
+        - formats
+      properties:
+        platform:
+          type: string
+        title:
+          type: string
+        thumbnail:
+          type: ["string", "null"]
+        duration:
+          type: ["integer", "null"]
+        formats:
+          type: array
+          items:
+            $ref: "#/components/schemas/MediaFormat"
+    DownloadInput:
+      type: object
+      required:
+        - url
+        - format
       properties:
         url:
           type: string
-          description: URL to download
         format:
           type: string
-          description: "mp4, mp3, or best"
-
     DownloadToken:
       type: object
-      required: [token, filename]
+      required:
+        - token
+        - filename
       properties:
         token:
           type: string
-          description: Signed token to use with /api/download/stream?token=...
         filename:
-          type: string
-          description: Suggested filename for the download
-
-    ErrorResponse:
-      type: object
-      required: [error]
-      properties:
-        error:
           type: string

@@ -6,11 +6,6 @@ import { logger } from "./lib/logger";
 
 const app: Express = express();
 
-const ALLOWED_ORIGINS = (process.env.ALLOWED_ORIGINS ?? "")
-  .split(",")
-  .map((o) => o.trim())
-  .filter(Boolean);
-
 app.use(
   pinoHttp({
     logger,
@@ -30,27 +25,7 @@ app.use(
     },
   }),
 );
-
-app.use(
-  cors({
-    origin: (origin, callback) => {
-      // Allow requests with no origin (e.g. curl, mobile apps, same-origin)
-      if (!origin) return callback(null, true);
-      // Allow all origins if no allowlist configured (dev / Replit)
-      if (ALLOWED_ORIGINS.length === 0) return callback(null, true);
-      // Allow Replit dev domains always
-      if (origin.includes(".replit.dev") || origin.includes(".repl.co")) {
-        return callback(null, true);
-      }
-      if (ALLOWED_ORIGINS.includes(origin)) {
-        return callback(null, true);
-      }
-      callback(new Error(`CORS: origin ${origin} not allowed`));
-    },
-    credentials: true,
-  }),
-);
-
+app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
