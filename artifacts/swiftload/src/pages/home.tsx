@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useTranslation } from "@/hooks/use-language";
-import { AdSlot } from "@/components/ad-slot";
+import { AdBanner } from "@/components/ad-banner";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -81,7 +81,7 @@ export default function Home() {
         <div className="container mx-auto px-4 max-w-5xl relative z-10">
           
           <div className="mb-10 max-w-3xl mx-auto">
-            <AdSlot type="top-banner" />
+            <AdBanner slot="9145434250" />
           </div>
 
           <motion.div 
@@ -212,6 +212,8 @@ export default function Home() {
                             ))}
                           </RadioGroup>
 
+                          <AdBanner slot="8648564633" className="mb-6" />
+
                           <Button 
                             className="w-full h-14 text-lg font-semibold bg-primary hover:bg-primary/90 text-white shadow-lg"
                             onClick={handleDownload}
@@ -229,12 +231,11 @@ export default function Home() {
                       </CardContent>
                     </Card>
 
-                    <AdSlot type="below-download" />
                   </div>
 
                   <div className="hidden lg:block">
                     <div className="sticky top-24">
-                      <AdSlot type="sidebar" />
+                      <AdBanner slot="5583417599" />
                     </div>
                   </div>
                 </div>

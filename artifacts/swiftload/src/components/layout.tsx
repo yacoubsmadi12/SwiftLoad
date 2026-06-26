@@ -1,6 +1,6 @@
 import { Header } from "./header";
 import { Footer } from "./footer";
-import { AdSlot } from "./ad-slot";
+import { AdBanner } from "./ad-banner";
 import { LanguageProvider } from "@/hooks/use-language";
 
 export function Layout({ children }: { children: React.ReactNode }) {
@@ -12,12 +12,12 @@ export function Layout({ children }: { children: React.ReactNode }) {
         {/* Fixed side ad columns — desktop only */}
         <div className="hidden xl:flex fixed inset-y-0 left-0 w-[180px] items-center justify-center z-40 pointer-events-none pt-16">
           <div className="pointer-events-auto sticky top-1/2 -translate-y-1/2">
-            <AdSlot type="left-sidebar" />
+            <AdBanner slot="1560412100" />
           </div>
         </div>
         <div className="hidden xl:flex fixed inset-y-0 right-0 w-[180px] items-center justify-center z-40 pointer-events-none pt-16">
           <div className="pointer-events-auto sticky top-1/2 -translate-y-1/2">
-            <AdSlot type="right-sidebar" />
+            <AdBanner slot="5583417599" />
           </div>
         </div>
 

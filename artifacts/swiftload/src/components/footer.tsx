@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { Phone, Mail } from "lucide-react";
 import { useTranslation } from "@/hooks/use-language";
-import { AdSlot } from "./ad-slot";
+import { AdBanner } from "./ad-banner";
 
 export function Footer() {
   const { t } = useTranslation();
@@ -46,7 +46,7 @@ export function Footer() {
 
       {/* Footer banner ad slot */}
       <div className="w-full border-b border-white/5 py-4 px-4 flex items-center justify-center">
-        <AdSlot type="footer-banner" />
+        <AdBanner slot="9961646309" />
       </div>
 
       <div className="container mx-auto px-4 py-12">

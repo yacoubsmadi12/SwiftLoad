@@ -1,0 +1,166 @@
+Integrate Google AdSense into the project using Google best practices.
+
+## IMPORTANT
+
+Load the Google AdSense script ONLY ONCE globally in the application's root HTML (index.html or root layout).
+
+<script async src="https://pagead2.googlesyndication.com/pagead/js/adsbygoogle.js?client=ca-pub-1493226158255742" crossorigin="anonymous"></script>
+
+Never include this script anywhere else.
+
+------------------------------------------------------------
+
+## Create a reusable React component
+
+Create a reusable component named:
+
+AdBanner
+
+Props:
+
+slot
+
+Example:
+
+<AdBanner slot="9145434250" />
+
+The component must render:
+
+<ins
+    className="adsbygoogle"
+    style={{ display: "block" }}
+    data-ad-client="ca-pub-1493226158255742"
+    data-ad-slot={slot}
+    data-ad-format="auto"
+    data-full-width-responsive="true"
+/>
+
+After the component mounts, initialize the ad with:
+
+(window.adsbygoogle = window.adsbygoogle || []).push({});
+
+Requirements:
+
+- Use useEffect().
+- Prevent duplicate initialization.
+- Do not initialize until the <ins> element exists.
+- Avoid hydration issues.
+- Do not throw AdSense duplicate errors.
+
+------------------------------------------------------------
+
+## Replace the existing placeholders
+
+### Header Banner
+
+Slot:
+9145434250
+
+Component:
+
+<AdBanner slot="9145434250" />
+
+------------------------------------------------------------
+
+### Left Sidebar
+
+Slot:
+1560412100
+
+Component:
+
+<AdBanner slot="1560412100" />
+
+------------------------------------------------------------
+
+### Right Sidebar
+
+Slot:
+5583417599
+
+Component:
+
+<AdBanner slot="5583417599" />
+
+------------------------------------------------------------
+
+### Results Banner
+
+Place this advertisement immediately AFTER the analysis/results section and BEFORE the download button.
+
+Slot:
+8648564633
+
+Component:
+
+<AdBanner slot="8648564633" />
+
+------------------------------------------------------------
+
+### Footer Banner
+
+Place above the footer.
+
+Slot:
+9961646309
+
+Component:
+
+<AdBanner slot="9961646309" />
+
+------------------------------------------------------------
+
+## Responsive behavior
+
+Desktop
+
+- Header: full width
+- Left sidebar: visible
+- Right sidebar: visible
+- Results banner: full width
+- Footer: full width
+
+Tablet
+
+- Keep responsive layout.
+
+Mobile
+
+- Hide left and right sidebar ads if necessary.
+- Keep Header, Results and Footer responsive.
+
+------------------------------------------------------------
+
+## DO NOT MODIFY
+
+- Existing UI
+- Layout
+- Colors
+- Tailwind classes
+- Typography
+- Animations
+- Spacing
+- Business logic
+
+Only replace the placeholder advertisement containers with the real Google AdSense components.
+
+------------------------------------------------------------
+
+## Final AdSense Placements
+
+Header Banner
+Slot: 9145434250
+
+Left Sidebar
+Slot: 1560412100
+
+Right Sidebar
+Slot: 5583417599
+
+Results Banner
+Slot: 8648564633
+
+Footer Banner
+Slot: 9961646309
+
+The AdSense script must exist only once globally, and every ad placement must use the reusable AdBanner component.
