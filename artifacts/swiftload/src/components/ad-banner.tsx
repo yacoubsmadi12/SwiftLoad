@@ -11,13 +11,17 @@ export function AdBanner({ slot, className }: AdBannerProps) {
 
   useEffect(() => {
     if (initialized.current) return;
-    if (!insRef.current) return;
+    const ins = insRef.current;
+    if (!ins) return;
+    // Do not initialize if the container has no visible width
+    // (e.g. sidebar ads inside a "hidden xl:flex" parent on mobile/tablet)
+    if (ins.offsetWidth === 0) return;
 
     try {
       initialized.current = true;
       ((window as any).adsbygoogle = (window as any).adsbygoogle || []).push({});
     } catch {
-      // silently ignore duplicate init errors
+      // Silently ignore TagError and duplicate-init errors from AdSense
     }
   }, []);
 
