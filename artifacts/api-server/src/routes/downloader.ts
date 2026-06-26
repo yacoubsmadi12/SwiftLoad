@@ -9,7 +9,15 @@ import { logger } from "../lib/logger";
 
 const router = Router();
 
-const SECRET = process.env.SESSION_SECRET ?? "swiftload-secret-key";
+const SECRET: string = (() => {
+  if (process.env.SESSION_SECRET) return process.env.SESSION_SECRET;
+  const generated = crypto.randomBytes(32).toString("hex");
+  logger.warn(
+    "SESSION_SECRET is not set. A random secret was generated for this process. " +
+    "Set SESSION_SECRET in production to prevent token invalidation on restart."
+  );
+  return generated;
+})();
 const TOKEN_TTL_MS = 5 * 60 * 1000; // 5 minutes
 
 // ── helpers ──────────────────────────────────────────────────────────────────
@@ -226,6 +234,26 @@ router.get("/download/stream", async (req, res) => {
 
   // For direct file downloads, proxy the file
   if (format === "file") {
+    // SSRF guard — block requests to private/localhost ranges
+    try {
+      const { hostname } = new URL(url);
+      const isPrivate =
+        /^localhost$/i.test(hostname) ||
+        /^127\./.test(hostname) ||
+        /^10\./.test(hostname) ||
+        /^172\.(1[6-9]|2\d|3[01])\./.test(hostname) ||
+        /^192\.168\./.test(hostname) ||
+        /^::1$/.test(hostname) ||
+        /^fd[0-9a-f]{2}:/i.test(hostname) ||
+        /^169\.254\./.test(hostname);
+      if (isPrivate) {
+        res.status(400).json({ error: "Invalid URL" });
+        return;
+      }
+    } catch {
+      res.status(400).json({ error: "Invalid URL" });
+      return;
+    }
     try {
       const fetch = (await import("node-fetch")).default;
       const upstream = await fetch(url);
