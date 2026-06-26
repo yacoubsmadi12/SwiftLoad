@@ -264,7 +264,7 @@ router.get("/download/stream", async (req, res) => {
 
   req.log.info({ url, format }, "Starting yt-dlp stream");
 
-  const proc = spawn("yt-dlp", [...YTDLP_BASE_ARGS, ...args]);
+  const proc = spawn("yt-dlp", [...YTDLP_COMMON_ARGS, ...args]);
 
   proc.stdout.pipe(res);
 
